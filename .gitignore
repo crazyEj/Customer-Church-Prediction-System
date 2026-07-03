@@ -1,0 +1,8 @@
+venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+data/processed/*
+!data/processed/.gitkeep
+saved_models/*.pkl
+.DS_Store

@@ -1,0 +1,38 @@
+dataset:
+  name: "telco_churn"
+  raw_path: "data/raw/telco_churn.csv"
+  processed_path: "data/processed/telco_churn_processed.csv"
+
+target:
+  column: "Churn"
+  positive_label: "Yes"
+
+id_column: "customerID"
+
+features:
+  categorical:
+    - gender
+    - SeniorCitizen
+    - Partner
+    - Dependents
+    - PhoneService
+    - MultipleLines
+    - InternetService
+    - OnlineSecurity
+    - OnlineBackup
+    - DeviceProtection
+    - TechSupport
+    - StreamingTV
+    - StreamingMovies
+    - Contract
+    - PaperlessBilling
+    - PaymentMethod
+  numerical:
+    - tenure
+    - MonthlyCharges
+    - TotalCharges
+
+model:
+  saved_path: "saved_models/churn_model.pkl"
+  random_state: 42
+  test_size: 0.2
