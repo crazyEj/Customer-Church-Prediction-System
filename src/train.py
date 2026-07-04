@@ -131,6 +131,11 @@ def main():
 
     models = get_models(y_train)
     results_df = train_and_compare(models, X_train, y_train, X_test, y_test)
+    # Save all three trained models for evaluation/comparison plots,
+    # not just the winner — lets us visualize ROC curves side by side.
+    Path("saved_models").mkdir(exist_ok=True)
+    joblib.dump(results_df.set_index("model")["model_object"].to_dict(),
+                "saved_models/all_models.pkl")
 
     print("\n--- Model Comparison ---")
     print(results_df[["model", "precision", "recall", "f1", "roc_auc", "pr_auc"]]
