@@ -83,6 +83,44 @@ Confusion matrices and ROC curve comparisons for all three models are available 
 
 ---
 
+
+---
+
+## Generalization Test: E-commerce Dataset
+
+To validate the config-driven architecture's core claim — that the same pipeline code can handle a structurally different dataset by swapping only the config file — the pipeline was pointed at a second dataset: an [e-commerce customer churn dataset](https://www.kaggle.com/datasets/ankitverma2010/ecommerce-customer-churn-analysis-and-prediction) (5,630 customers, 20 features, mostly behavioral/numerical rather than Telco's mostly-categorical composition).
+
+### Pipeline changes required
+
+The pipeline did **not** run unmodified — and that gap is itself an informative result. Two changes were needed:
+
+1. **Excel file support** — the e-commerce dataset ships as `.xlsx` (with a "Data Dict" sheet alongside the real "E Comm" data sheet), while Telco is `.csv`. `load_raw_data()` was updated to branch on file extension.
+2. **Generalized missing-value imputation** — Telco's original cleaning logic contained a hardcoded, dataset-specific fix (`TotalCharges` blank-string coercion, imputed with `0`). The e-commerce dataset has genuine `NaN` values spread across 7 different numerical columns (`Tenure`, `WarehouseToHome`, `HourSpendOnApp`, `OrderAmountHikeFromlastYear`, `CouponUsed`, `OrderCount`, `DaySinceLastOrder` — each ~4.5-5.5% missing). `clean_data()` was refactored to apply **median imputation across all configured numerical columns generically**, rather than a single hardcoded column-specific fix. This still correctly handles Telco's `TotalCharges` case, though with a minor tradeoff: median imputation is less semantically precise than the original "0 tenure = $0 charges" domain-specific reasoning.
+3. **CLI-configurable entrypoints** — both `data_pipeline.py` and `train.py` now accept a `--config` argument, and artifact filenames are derived from `config["dataset"]["name"]` so running the pipeline on one dataset never overwrites the other's saved models.
+
+### Results
+
+| Model | Precision | Recall | F1 | ROC-AUC | PR-AUC |
+|---|---|---|---|---|---|
+| Logistic Regression | 0.441 | 0.847 | 0.580 | 0.886 | 0.681 |
+| Random Forest | 0.994 | 0.863 | 0.924 | 0.999 | 0.994 |
+| **XGBoost** | **0.969** | **0.979** | **0.974** | 0.999 | 0.991 |
+
+**XGBoost was selected** (F1 = 0.974) — a stark contrast to Telco, where Logistic Regression won and all models sat in the 0.55-0.61 F1 range.
+
+### Investigating the unusually high performance
+
+An F1 score above 0.97 is unusual enough to warrant suspicion rather than celebration — in real-world ML work, results that look "too good" are more often a sign of data leakage than genuine model quality. Before accepting this result, two checks were run:
+
+- **Correlation analysis** across all 13 numerical features against `Churn` — no single feature showed a strong linear correlation (`Tenure`: -0.35, `Complain`: 0.25, all others below 0.16), ruling out an obvious leaking column.
+- **Duplicate check** — zero duplicate rows and zero duplicate `CustomerID`s, ruling out train/test contamination via repeated records.
+
+**Conclusion:** the elevated performance is most likely explained by the e-commerce dataset being genuinely more cleanly separable — a combination of its smaller size (5,630 vs. 7,043 rows) and a more curated feature set — rather than a pipeline defect or leakage. Tree-based models (Random Forest, XGBoost) likely captured non-linear interactions across several moderate-strength features that no single correlation coefficient would reveal.
+
+This distinguishes two very different situations that can look identical from a metrics table alone — "the pipeline is broken" versus "the data is genuinely easier" — and reaching a defensible answer required verification, not just accepting a good-looking number.
+
+---
+
 ## Setup
 
 ```bash
