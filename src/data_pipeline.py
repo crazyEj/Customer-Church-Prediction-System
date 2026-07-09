@@ -16,23 +16,50 @@ def load_config(config_path: str = "config/config.yaml") -> dict:
 
 
 def load_raw_data(config: dict) -> pd.DataFrame:
-    """Load the raw dataset specified in config."""
-    return pd.read_csv(config["dataset"]["raw_path"])
+    """Load the raw dataset specified in config. Supports CSV and Excel."""
+    raw_path = config["dataset"]["raw_path"]
+    if raw_path.endswith((".xlsx", ".xls")):
+        # E-commerce dataset ships with multiple sheets; the real
+        # data lives in "E Comm", not the "Data Dict" sheet.
+        return pd.read_excel(raw_path, sheet_name="E Comm")
+    return pd.read_csv(raw_path)
 
 def clean_data(df: pd.DataFrame, config: dict) -> pd.DataFrame:
     """
-    Apply dataset-specific cleaning that must happen BEFORE
-    the sklearn Pipeline (scaling/encoding) ever sees the data.
+    Apply cleaning that must happen BEFORE the sklearn Pipeline
+    (scaling/encoding) ever sees the data.
+
+    Handles two classes of missingness generically, so this works
+    across datasets without dataset-specific hardcoded fixes:
+      1. Numerical columns with real NaN values -> median imputation
+      2. Columns stored as strings that should be numeric but contain
+         blank/whitespace values (e.g. Telco's TotalCharges) -> coerced
+         to numeric, then median imputation
     """
     df = df.copy()
 
-    df["TotalCharges"] = pd.to_numeric(df["TotalCharges"], errors="coerce")
-    df["TotalCharges"] = df["TotalCharges"].fillna(0)
+    numerical_features = config["features"]["numerical"]
 
+    for col in numerical_features:
+        if col in df.columns:
+            # Coerce to numeric in case the column is stored as text
+            # with stray blank/whitespace entries (Telco's TotalCharges
+            # case). This is a no-op for columns that are already numeric.
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+            if df[col].isnull().any():
+                median_value = df[col].median()
+                df[col] = df[col].fillna(median_value)
+
+    # Encode target based on config's positive_label. Handles both
+    # string labels (Telco: "Yes"/"No") and pre-encoded integer
+    # labels (E-commerce: already 0/1) without needing a dataset-
+    # specific branch.
     target_col = config["target"]["column"]
     positive_label = config["target"]["positive_label"]
     df[target_col] = (df[target_col] == positive_label).astype(int)
 
+    # Drop the ID column — not a predictive feature
     df = df.drop(columns=[config["id_column"]])
 
     return df
