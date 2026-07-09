@@ -103,8 +103,14 @@ def split_data(df: pd.DataFrame, config: dict):
 
 
 def main():
-    config = load_config()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", default="config/config.yaml", help="Path to config YAML")
+    args = parser.parse_args()
 
+    config = load_config(args.config)
+
+    print(f"Using config: {args.config}")
     print("Loading raw data...")
     df = load_raw_data(config)
 
@@ -121,18 +127,16 @@ def main():
     X_train_processed = preprocessor.fit_transform(X_train)
     X_test_processed = preprocessor.transform(X_test)
 
-    # Save the fitted preprocessor — predict.py will load this exact
-    # object so new customer data gets the identical transformation
-    # (same scaling parameters, same one-hot columns) as training data.
+    dataset_name = config["dataset"]["name"]
     Path("saved_models").mkdir(exist_ok=True)
-    joblib.dump(preprocessor, "saved_models/preprocessor.pkl")
-    print("Saved fitted preprocessor to saved_models/preprocessor.pkl")
+    preprocessor_path = f"saved_models/preprocessor_{dataset_name}.pkl"
+    joblib.dump(preprocessor, preprocessor_path)
+    print(f"Saved fitted preprocessor to {preprocessor_path}")
 
-    # Save processed splits so train.py doesn't need to redo this work
     Path("data/processed").mkdir(parents=True, exist_ok=True)
-    joblib.dump((X_train_processed, X_test_processed, y_train, y_test),
-                "data/processed/train_test_data.pkl")
-    print("Saved processed train/test data to data/processed/train_test_data.pkl")
+    data_path = f"data/processed/train_test_data_{dataset_name}.pkl"
+    joblib.dump((X_train_processed, X_test_processed, y_train, y_test), data_path)
+    print(f"Saved processed train/test data to {data_path}")
 
 
 if __name__ == "__main__":

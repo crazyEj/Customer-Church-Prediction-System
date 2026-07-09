@@ -18,14 +18,11 @@ def load_config(config_path: str = "config/config.yaml") -> dict:
     with open(config_path, "r") as f:
         return yaml.safe_load(f)
 
-
 def load_processed_data(config: dict):
     """Load the train/test arrays saved by data_pipeline.py."""
-    # Note: data_pipeline.py actually saves to a fixed path, not
-    # config's processed_path — we load from where it was written.
-    X_train, X_test, y_train, y_test = joblib.load(
-        "data/processed/train_test_data.pkl"
-    )
+    dataset_name = config["dataset"]["name"]
+    data_path = f"data/processed/train_test_data_{dataset_name}.pkl"
+    X_train, X_test, y_train, y_test = joblib.load(data_path)
     return X_train, X_test, y_train, y_test
 
 
@@ -124,18 +121,19 @@ def select_best_model(results_df: pd.DataFrame):
 
 
 def main():
-    config = load_config()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", default="config/config.yaml", help="Path to config YAML")
+    args = parser.parse_args()
 
+    config = load_config(args.config)
+
+    print(f"Using config: {args.config}")
     print("Loading processed train/test data...")
     X_train, X_test, y_train, y_test = load_processed_data(config)
 
     models = get_models(y_train)
     results_df = train_and_compare(models, X_train, y_train, X_test, y_test)
-    # Save all three trained models for evaluation/comparison plots,
-    # not just the winner — lets us visualize ROC curves side by side.
-    Path("saved_models").mkdir(exist_ok=True)
-    joblib.dump(results_df.set_index("model")["model_object"].to_dict(),
-                "saved_models/all_models.pkl")
 
     print("\n--- Model Comparison ---")
     print(results_df[["model", "precision", "recall", "f1", "roc_auc", "pr_auc"]]
@@ -146,7 +144,6 @@ def main():
     Path("saved_models").mkdir(exist_ok=True)
     joblib.dump(best_model, config["model"]["saved_path"])
     print(f"\nSaved best model ({best_name}) to {config['model']['saved_path']}")
-
 
 if __name__ == "__main__":
     main()
