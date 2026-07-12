@@ -86,10 +86,6 @@ def explain_prediction(df: pd.DataFrame, config: dict, preprocessor, model, X_tr
 
 
 def main():
-    """
-    Example usage: predict churn for a small sample of customers
-    from the raw dataset (simulating "new" data for demonstration).
-    """
     config = load_config()
     preprocessor, model = load_artifacts(config)
 
@@ -99,11 +95,13 @@ def main():
     results = predict_churn(sample, config, preprocessor, model)
     print(results[["customerID", "Churn_Prediction", "Churn_Probability"]].to_string(index=False))
 
+    # Load training data to use as SHAP's background reference
+    X_train, X_test, y_train, y_test = joblib.load("data/processed/train_test_data.pkl")
+
     print("\n--- Explanation for first customer ---")
-    explanations = explain_prediction(sample.iloc[[0]], config, preprocessor, model)
+    explanations = explain_prediction(sample.iloc[[0]], config, preprocessor, model, X_train)
     for exp in explanations:
         print(f"  {exp['feature']}: {exp['shap_value']:+.4f} ({exp['effect']})")
-
 
 if __name__ == "__main__":
     main()
