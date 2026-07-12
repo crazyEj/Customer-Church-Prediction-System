@@ -54,17 +54,20 @@ def predict_churn(df: pd.DataFrame, config: dict, preprocessor, model) -> pd.Dat
     return results
 
 
-def explain_prediction(df: pd.DataFrame, config: dict, preprocessor, model, top_n: int = 5) -> list:
+def explain_prediction(df: pd.DataFrame, config: dict, preprocessor, model, X_train_background, top_n: int = 5) -> list:
     """
     Return the top N features driving a single customer's churn
-    prediction, using SHAP. Assumes df contains exactly one customer
-    (as produced by predict_churn's input).
+    prediction, using SHAP. X_train_background provides the
+    reference distribution SHAP compares this customer against —
+    using the single customer's own row as background (as before)
+    collapses all contributions to zero, since there's no variation
+    to compare against.
     """
     df_clean = clean_new_data(df, config)
     X_processed = preprocessor.transform(df_clean)
     feature_names = preprocessor.get_feature_names_out()
 
-    explainer = shap.LinearExplainer(model, X_processed, feature_names=feature_names)
+    explainer = shap.LinearExplainer(model, X_train_background, feature_names=feature_names)
     shap_values = explainer(X_processed)
 
     contributions = list(zip(feature_names, shap_values.values[0]))
