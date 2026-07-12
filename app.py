@@ -6,9 +6,8 @@ import joblib
 
 sys.path.append(str(Path(__file__).parent / "src"))
 from data_pipeline import load_config
-from predict import load_artifacts, predict_churn
+from predict import load_artifacts, predict_churn, explain_prediction
 
-config, preprocessor, model, X_train = get_config_and_artifacts()
 st.set_page_config(page_title="Customer Churn Predictor", page_icon="📊", layout="centered")
 
 # Load config and artifacts once, cached across reruns for performance
@@ -19,9 +18,7 @@ def get_config_and_artifacts():
     X_train, X_test, y_train, y_test = joblib.load("data/processed/train_test_data.pkl")
     return config, preprocessor, model, X_train
 
-config = get_config_and_artifacts()[0]
-preprocessor = get_config_and_artifacts()[1]
-model = get_config_and_artifacts()[2]
+config, preprocessor, model, X_train = get_config_and_artifacts()
 
 st.title("📊 Customer Churn Prediction")
 st.write("Enter a customer's details below to predict their likelihood of churning.")
@@ -78,7 +75,6 @@ with col2:
 st.divider()
 
 if st.button("Predict Churn", type="primary", use_container_width=True):
-    # Assemble a single-row DataFrame matching the raw dataset's schema
     input_data = pd.DataFrame([{
         "customerID": "MANUAL-INPUT",
         "gender": gender,
@@ -113,6 +109,7 @@ if st.button("Predict Churn", type="primary", use_container_width=True):
         st.success(f"✅ **Low Churn Risk** — Predicted probability: {probability:.1%}")
 
     st.progress(float(probability))
+
     st.divider()
     st.subheader("Why this prediction?")
     explanations = explain_prediction(input_data, config, preprocessor, model, X_train)
