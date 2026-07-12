@@ -2,11 +2,13 @@ import streamlit as st
 import pandas as pd
 import sys
 from pathlib import Path
+import joblib
 
 sys.path.append(str(Path(__file__).parent / "src"))
 from data_pipeline import load_config
 from predict import load_artifacts, predict_churn
 
+config, preprocessor, model, X_train = get_config_and_artifacts()
 st.set_page_config(page_title="Customer Churn Predictor", page_icon="📊", layout="centered")
 
 # Load config and artifacts once, cached across reruns for performance
@@ -14,7 +16,8 @@ st.set_page_config(page_title="Customer Churn Predictor", page_icon="📊", layo
 def get_config_and_artifacts():
     config = load_config()
     preprocessor, model = load_artifacts(config)
-    return config, preprocessor, model
+    X_train, X_test, y_train, y_test = joblib.load("data/processed/train_test_data.pkl")
+    return config, preprocessor, model, X_train
 
 config = get_config_and_artifacts()[0]
 preprocessor = get_config_and_artifacts()[1]
@@ -110,3 +113,10 @@ if st.button("Predict Churn", type="primary", use_container_width=True):
         st.success(f"✅ **Low Churn Risk** — Predicted probability: {probability:.1%}")
 
     st.progress(float(probability))
+    st.divider()
+    st.subheader("Why this prediction?")
+    explanations = explain_prediction(input_data, config, preprocessor, model, X_train)
+
+    for exp in explanations:
+        icon = "🔺" if "increases" in exp["effect"] else "🔻"
+        st.write(f"{icon} **{exp['feature']}** ({exp['effect']}, impact: {exp['shap_value']:+.3f})")
