@@ -1,12 +1,10 @@
 import joblib
 import yaml
 import pandas as pd
+import shap
 import sys
 from pathlib import Path
 
-# Reuse the exact same cleaning logic as training, so predictions
-# are guaranteed to see data prepared identically to what the
-# model was trained on.
 sys.path.append(str(Path(__file__).parent))
 from data_pipeline import load_config
 
@@ -23,8 +21,6 @@ def clean_new_data(df: pd.DataFrame, config: dict) -> pd.DataFrame:
     df["TotalCharges"] = pd.to_numeric(df["TotalCharges"], errors="coerce")
     df["TotalCharges"] = df["TotalCharges"].fillna(0)
 
-    # Drop ID column if present — same reasoning as training:
-    # it's not a predictive feature.
     id_col = config["id_column"]
     if id_col in df.columns:
         df = df.drop(columns=[id_col])
@@ -46,9 +42,6 @@ def predict_churn(df: pd.DataFrame, config: dict, preprocessor, model) -> pd.Dat
     """
     df_clean = clean_new_data(df, config)
 
-    # IMPORTANT: .transform(), never .fit_transform() here — the
-    # preprocessor must apply the exact scaling/encoding learned
-    # during training, not refit new statistics on this data.
     X_processed = preprocessor.transform(df_clean)
 
     predictions = model.predict(X_processed)
@@ -61,6 +54,34 @@ def predict_churn(df: pd.DataFrame, config: dict, preprocessor, model) -> pd.Dat
     return results
 
 
+def explain_prediction(df: pd.DataFrame, config: dict, preprocessor, model, top_n: int = 5) -> list:
+    """
+    Return the top N features driving a single customer's churn
+    prediction, using SHAP. Assumes df contains exactly one customer
+    (as produced by predict_churn's input).
+    """
+    df_clean = clean_new_data(df, config)
+    X_processed = preprocessor.transform(df_clean)
+    feature_names = preprocessor.get_feature_names_out()
+
+    explainer = shap.LinearExplainer(model, X_processed, feature_names=feature_names)
+    shap_values = explainer(X_processed)
+
+    contributions = list(zip(feature_names, shap_values.values[0]))
+    contributions.sort(key=lambda x: abs(x[1]), reverse=True)
+
+    explanations = []
+    for feature, value in contributions[:top_n]:
+        direction = "increases" if value > 0 else "decreases"
+        explanations.append({
+            "feature": feature,
+            "shap_value": round(float(value), 4),
+            "effect": f"{direction} churn risk",
+        })
+
+    return explanations
+
+
 def main():
     """
     Example usage: predict churn for a small sample of customers
@@ -69,12 +90,16 @@ def main():
     config = load_config()
     preprocessor, model = load_artifacts(config)
 
-    # Demo: grab a few rows from the raw dataset to simulate new customers
     raw_df = pd.read_csv(config["dataset"]["raw_path"])
     sample = raw_df.drop(columns=[config["target"]["column"]]).head(5)
 
     results = predict_churn(sample, config, preprocessor, model)
     print(results[["customerID", "Churn_Prediction", "Churn_Probability"]].to_string(index=False))
+
+    print("\n--- Explanation for first customer ---")
+    explanations = explain_prediction(sample.iloc[[0]], config, preprocessor, model)
+    for exp in explanations:
+        print(f"  {exp['feature']}: {exp['shap_value']:+.4f} ({exp['effect']})")
 
 
 if __name__ == "__main__":
